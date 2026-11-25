@@ -30,6 +30,7 @@ class Fake {
     http.Response j(int s, Object o) => http.Response(jsonEncode(o), s, headers: {'content-type': 'application/json'});
     if (failWith != null) return j(failWith!, {'error': 'nope'});
     if (p == '/api/me') return j(200, {'id': 'ed', 'name': 'Ed', 'org': org, 'role': 'editor', 'status': 'confirmed'});
+    if (p == '/api/push/register') return j(200, {'ok': true});
     final m = RegExp(r'^/api/docs/([a-z-]+)(?:/(.+))?$').firstMatch(p);
     if (m == null) return j(404, {'error': 'not found'});
     final kind = m[1]!, i = m[2];
@@ -62,6 +63,13 @@ Future<(Fake, Store)> setup() async {
 
 Future<(Fake, Store)> setupStore() async {
   final f = Fake();
+  final s = Store(Api('http://localhost:3000', client: MockClient(f.handle)));
+  await s.start();
+  return (f, s);
+}
+
+/// Like [setupStore] but with a server the test already holds, so it can look at what the phone sent.
+Future<(Fake, Store)> setupStoreWith(Fake f) async {
   final s = Store(Api('http://localhost:3000', client: MockClient(f.handle)));
   await s.start();
   return (f, s);

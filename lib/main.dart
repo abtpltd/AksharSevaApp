@@ -1,17 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
 import 'api.dart';
+import 'push.dart';
 import 'screens/connect_screen.dart';
 import 'screens/meetings_screen.dart';
 import 'store.dart';
 import 'theme.dart';
 import 'vault.dart';
 
-void main() => runApp(AksharSevakApp(vault: SecureVault()));
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(AksharSevakApp(vault: SecureVault(), push: FirebasePush()));
+}
 
 class AksharSevakApp extends StatefulWidget {
   final Vault vault;
-  const AksharSevakApp({super.key, required this.vault});
+  final PushService push;
+  const AksharSevakApp({super.key, required this.vault, this.push = const NoPush()});
   @override
   State<AksharSevakApp> createState() => _AppState();
 }
@@ -51,6 +57,7 @@ class _AppState extends State<AksharSevakApp> {
         }
       }
     }
+    if (s != null) _startPush(s);
     if (!mounted) return;
     setState(() {
       savedAddress = address;
@@ -70,10 +77,21 @@ class _AppState extends State<AksharSevakApp> {
     } else {
       await widget.vault.clear();
     }
+    _startPush(s);
     setState(() => store = s);
   }
 
+  PushLink? _link;
+
+  /// Tells the server where to reach this phone when the app is closed.
+  void _startPush(Store s) {
+    _link = PushLink(widget.push, s.api);
+    unawaited(_link!.start());
+  }
+
   Future<void> _signOut() async {
+    await _link?.stop(); // forget this phone first, while the sign-in still works
+    _link = null;
     store?.api.signOut();
     store?.dispose();
     await widget.vault.clear();
