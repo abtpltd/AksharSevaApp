@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../store.dart';
+import '../slide_view.dart';
+import 'slide_screens.dart';
 
 const mediums = ['Live', 'Video', 'PPT', 'Emcee', 'Other'];
 
@@ -147,54 +149,40 @@ class _Slides extends StatelessWidget {
   final String mid;
   const _Slides(this.store, this.mid);
 
-  Future<void> _edit(BuildContext context, [dynamic rec]) {
-    final block = Map<String, dynamic>.from(rec?.body['block'] ?? {});
-    final label = TextEditingController(text: '${block['label'] ?? ''}');
-    final heading = TextEditingController(text: '${block['heading'] ?? ''}');
-    final lines = TextEditingController(text: ((block['lines'] as List?) ?? []).join('\n'));
-    return _form(
-      context,
-      title: rec == null ? 'Add slide' : 'Change slide',
-      fields: [
-        TextField(controller: label, decoration: const InputDecoration(labelText: 'Label (small title)')),
-        TextField(controller: heading, decoration: const InputDecoration(labelText: 'Heading')),
-        TextField(controller: lines, minLines: 3, maxLines: 8, decoration: const InputDecoration(labelText: 'Lines (one per line)')),
-      ],
-      onSave: () {
-        final ls = lines.text.split('\n').map((x) => x.trim()).where((x) => x.isNotEmpty).toList();
-        if (heading.text.trim().isEmpty && ls.isEmpty) return Future.value(false);
-        final b = {...block, 'id': block['id'] ?? rec?.id ?? newUuid(), 'kind': 'text', 'label': label.text.trim(), 'heading': heading.text.trim(), 'lines': ls};
-        if (rec == null) {
-          return store.add('slide', mid, {'block': b});
-        }
-        return store.update(rec, {'block': {...b, 'id': rec.id}});
-      },
-      onDelete: rec == null ? null : () => store.delete(rec),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final slides = store.slidesOf(mid);
+    final write = store.canWrite;
+    final donors = [for (final d in store.donorsOf(mid)) Map<String, dynamic>.from(d.body)];
     return Scaffold(
-      floatingActionButton: store.canWrite ? FloatingActionButton.extended(onPressed: () => _addWithFreshList(context, store, () => _edit(context)), icon: const Icon(Icons.add), label: const Text('Add slide')) : null,
+      floatingActionButton: write
+          ? FloatingActionButton(
+              tooltip: 'Add slide',
+              onPressed: () => _addWithFreshList(context, store, () => Navigator.of(context).push(MaterialPageRoute(fullscreenDialog: true, builder: (_) => SlideForm(store: store, meetingId: mid)))),
+              child: const Icon(Icons.add),
+            )
+          : null,
       body: slides.isEmpty
           ? const Center(child: Text('No slides yet.'))
-          : ListView(padding: const EdgeInsets.only(bottom: 90), children: [
-              for (var i = 0; i < slides.length; i++)
-                Builder(builder: (c) {
-                  final r = slides[i];
-                  final b = (r.body['block'] is Map) ? Map<String, dynamic>.from(r.body['block']) : <String, dynamic>{};
-                  final isText = b['kind'] == 'text';
-                  final title = '${b['heading'] ?? ''}'.isNotEmpty ? '${b['heading']}' : (('${b['label'] ?? ''}'.isNotEmpty) ? '${b['label']}' : '${b['kind'] ?? 'slide'}');
-                  return ListTile(
-                    leading: CircleAvatar(child: Text('${i + 1}')),
-                    title: Text(title),
-                    subtitle: Text(isText ? ((b['lines'] as List?) ?? []).take(2).join(', ') : 'Edit this kind of slide on the back office'),
-                    onTap: !store.canWrite ? null : (isText ? () => _edit(c, r) : () async { if (await _confirmDelete(c, 'this slide')) await store.delete(r); }),
-                  );
-                }),
-            ]),
+          : ReorderableListView.builder(
+              padding: const EdgeInsets.only(bottom: 90),
+              buildDefaultDragHandles: false,
+              itemCount: slides.length,
+              onReorder: (from, to) { if (write) store.moveSlide(mid, from, to); },
+              itemBuilder: (c, i) {
+                final r = slides[i];
+                final b = (r.body['block'] is Map) ? Map<String, dynamic>.from(r.body['block']) : <String, dynamic>{};
+                final lines = ((b['lines'] as List?) ?? []).take(2).join(', ');
+                return ListTile(
+                  key: ValueKey(r.id),
+                  leading: SizedBox(width: 72, child: ClipRRect(borderRadius: BorderRadius.circular(3), child: IgnorePointer(child: SlideView(block: b, donors: donors)))),
+                  title: Text('${i + 1}. ${slideTitle(b)}'),
+                  subtitle: lines.isEmpty ? null : Text(lines, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  trailing: write ? ReorderableDragStartListener(index: i, child: const Padding(padding: EdgeInsets.all(8), child: Icon(Icons.drag_handle))) : null,
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => SlideViewer(store: store, meetingId: mid, start: i))),
+                );
+              },
+            ),
     );
   }
 }

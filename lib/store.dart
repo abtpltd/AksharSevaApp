@@ -45,6 +45,15 @@ double nextPos(Iterable<Rec> items) {
   return m + 1;
 }
 
+/// The place number for a record moved to position [to] (0 to others.length) among [others], the place numbers of the other records in order:
+/// halfway between its new neighbours, one past the last, or one before the first (D57).
+double placeBetween(List<num> others, int to) {
+  if (others.isEmpty) return 1;
+  if (to <= 0) return others.first.toDouble() - 1;
+  if (to >= others.length) return others.last.toDouble() + 1;
+  return (others[to - 1] + others[to]) / 2;
+}
+
 String? _s(Object? o) => o is String ? o : null;
 
 /// A plain line for the Notifications screen: something other people changed since the last read.
@@ -481,6 +490,20 @@ class Store extends ChangeNotifier {
     if (kind == 'slide' && body['block'] is Map) body['block'] = {...(body['block'] as Map), 'id': id};
     return _save(kind, id, m.org, body, null);
   }
+
+  /// Moves a slide of a meeting from list position [from] to position [to] (as the list is before the move). Only the moved slide is saved.
+  Future<bool> moveSlide(String meetingId, int from, int to) {
+    final l = slidesOf(meetingId);
+    if (from < 0 || from >= l.length) return Future.value(false);
+    final rec = l[from];
+    final others = [for (final r in l) if (r.id != rec.id) pos(r)];
+    var t = to > from ? to - 1 : to; // the list drops the moved one, so later positions shift up
+    t = t.clamp(0, others.length);
+    if (t == from) return Future.value(true);
+    return update(rec, {'pos': placeBetween(others, t)});
+  }
+
+  num pos(Rec r) => r.body['pos'] is num ? r.body['pos'] as num : 0;
 
   /// Changes a record. [fields] replaces the editable parts; the place and meeting stay.
   Future<bool> update(Rec rec, Map<String, dynamic> fields) {
