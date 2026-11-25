@@ -48,6 +48,13 @@ double nextPos(Iterable<Rec> items) {
 String? _s(Object? o) => o is String ? o : null;
 
 /// A plain line for the Notifications screen: something other people changed since the last read.
+/// One thing a person is to do at a meeting (see [Store.myDuties]).
+class Duty {
+  final Rec meeting, item;
+  final int startMinutes;
+  Duty(this.meeting, this.item, this.startMinutes);
+}
+
 class Notice {
   final String text;
   final DateTime at;
@@ -228,6 +235,32 @@ class Store extends ChangeNotifier {
       if (m.id == id) return m;
     }
     return null;
+  }
+
+  /// My duties: the program items of meetings that have not passed where the presenter named on the item is this person.
+  /// The presenter is typed text, so the match is by name, ignoring capitals; a short name inside a longer one counts either way.
+  /// (The scheduling records of D54 will replace this; until they exist this is the only place a person is named on a duty.)
+  List<Duty> myDuties({String? today}) {
+    final me = personName.trim().toLowerCase();
+    if (me.isEmpty) return [];
+    final from = today ?? DateTime.now().toIso8601String().substring(0, 10);
+    final out = <Duty>[];
+    for (final m in meetings) {
+      final date = '${m.body['date'] ?? ''}';
+      if (date.compareTo(from) < 0) continue;
+      var t = toMinutes('${m.body['start'] ?? '00:00'}');
+      for (final it in itemsOf(m.id)) {
+        final mins = it.body['minutes'] is num ? (it.body['minutes'] as num).round() : 0;
+        final who = '${it.body['presenter'] ?? ''}'.trim().toLowerCase();
+        if (who.length >= 2 && (who.contains(me) || me.contains(who))) out.add(Duty(m, it, t));
+        t += mins;
+      }
+    }
+    out.sort((x, y) {
+      final d = '${x.meeting.body['date']}'.compareTo('${y.meeting.body['date']}');
+      return d != 0 ? d : x.startMinutes.compareTo(y.startMinutes);
+    });
+    return out;
   }
 
   List<Rec> itemsOf(String meetingId) => byPlace(_items.where((r) => r.body['meetingId'] == meetingId));

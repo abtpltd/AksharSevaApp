@@ -116,7 +116,17 @@ class _MeetingsState extends State<MeetingsScreen> {
       case _View.notifications:
         return _notices();
       case _View.duties:
-        return const Center(child: Padding(padding: EdgeInsets.all(28), child: Text('No duties yet. Your duties from departments, sabhas and events will appear here when your coordinator assigns them.', textAlign: TextAlign.center)));
+        final duties = store.myDuties();
+        if (duties.isEmpty) return const Center(child: Padding(padding: EdgeInsets.all(28), child: Text('No duties yet. When you are named as the presenter of a program item in a coming meeting, it appears here.', textAlign: TextAlign.center)));
+        return ListView(children: [
+          for (final d in duties)
+            ListTile(
+              leading: const Icon(Icons.checklist),
+              title: Text('${d.item.body['item'] ?? ''}'),
+              subtitle: Text('${d.meeting.body['date']} · ${clock12(d.startMinutes)} · ${store.sabhaName(d.meeting)} · ${d.item.body['minutes'] ?? 0} min'),
+              onTap: () => _open(d.meeting),
+            ),
+        ]);
       case _View.home:
       case _View.sabha:
       case _View.asNeeded:
