@@ -5,6 +5,9 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: write
+
 jobs:
   apk:
     runs-on: ubuntu-latest
@@ -26,3 +29,10 @@ jobs:
         with:
           name: aksharsevak-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+      - name: Publish the APK as a release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk AksharSevak.apk
+          gh release create "v${{ github.run_number }}" AksharSevak.apk --title "AksharSevak build ${{ github.run_number }}" --notes "Android app (commit ${GITHUB_SHA::7}). Install the APK on the phone, sign in with the server address https://aksharseva.appspot.com" --latest
