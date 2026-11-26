@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../api.dart';
 import '../store.dart';
 import '../theme.dart';
+import '../updates.dart';
 import 'meeting_screen.dart';
 
 enum _View { home, sabha, asNeeded, notifications, duties }
@@ -20,6 +21,36 @@ class _MeetingsState extends State<MeetingsScreen> {
   _View view = _View.home;
   Rec? sabha;
   Store get store => widget.store;
+
+  @override
+  void initState() {
+    super.initState();
+    if (checkOnStart) WidgetsBinding.instance.addPostFrameCallback((_) => _updates(quiet: true));
+  }
+
+  /// Looks for a newer build. When [quiet], says nothing unless there is one.
+  Future<void> _updates({required bool quiet}) async {
+    final r = await updateCheck();
+    if (!mounted) return;
+    if (r is UpdateAvailable) {
+      final go = await showDialog<bool>(context: context, builder: (c) => AlertDialog(
+        title: const Text('Update available'),
+        content: Text('A newer AksharSevak (build ${r.info.build}) is ready. You have build ${r.current}. Update downloads in your browser; tap the downloaded file to install.'),
+        actions: [TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Later')), FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Update'))],
+      ));
+      if (go == true) {
+        final ok = await updateDownload(r.info);
+        if (!ok && mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open the download. Try again.')));
+      }
+    } else if (!quiet && mounted) {
+      final t = switch (r) {
+        UpToDate(:final build) => 'You have the newest version (build $build).',
+        UpdateByStore() => 'Google Play updates this app by itself.',
+        _ => 'Could not check for updates. Check your connection and try again.',
+      };
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t)));
+    }
+  }
 
   void _go(_View v, [Rec? s]) {
     Navigator.of(context).pop(); // close the menu
@@ -102,6 +133,10 @@ class _MeetingsState extends State<MeetingsScreen> {
           ]),
         ),
         const Divider(height: 1, color: line),
+        item(Icons.system_update_outlined, 'Check for updates', false, () {
+          Navigator.of(context).pop();
+          _updates(quiet: false);
+        }),
         item(Icons.logout, 'Sign out', false, () {
           Navigator.of(context).pop();
           widget.onSignOut();

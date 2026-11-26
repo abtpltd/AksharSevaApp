@@ -7,10 +7,12 @@ import 'screens/connect_screen.dart';
 import 'screens/meetings_screen.dart';
 import 'store.dart';
 import 'theme.dart';
+import 'updates.dart' as updates;
 import 'vault.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  updates.checkOnStart = true;
   runApp(AksharSevakApp(vault: SecureVault(), push: FirebasePush()));
 }
 
