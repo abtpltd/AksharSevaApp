@@ -82,7 +82,7 @@ class Store extends ChangeNotifier {
   String personName = '';
   bool canWrite = false;
   List<Rec> sabhas = [], meetings = [];
-  List<Rec> _items = [], _slides = [], _donors = [], _ticker = [], _cursor = [], _screen = [];
+  List<Rec> _items = [], _slides = [], _donors = [], _contacts = [], _ticker = [], _cursor = [], _screen = [];
   String? message; // a plain notice for the person
   String? problem; // the last connection problem, cleared by the next good read
   bool loading = false;
@@ -274,6 +274,22 @@ class Store extends ChangeNotifier {
 
   List<Rec> itemsOf(String meetingId) => byPlace(_items.where((r) => r.body['meetingId'] == meetingId));
   List<Rec> slidesOf(String meetingId) => byPlace(_slides.where((r) => r.body['meetingId'] == meetingId));
+  /// The center's donor directory (satsangis, companies, others), as the back office keeps it.
+  List<Rec> get contacts => [..._contacts]..sort((a, b) => '${a.body['name']}'.toLowerCase().compareTo('${b.body['name']}'.toLowerCase()));
+  /// Adds a name to the directory. False when it is already there or cannot be saved.
+  Future<bool> addContact(String name, String kind, String company, bool family) async {
+    final n = name.replaceAll(RegExp(r'\s+'), ' ').trim(), co = company.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (n.isEmpty || org.isEmpty) return false;
+    final key = '${n.toLowerCase()}|${kind == 'satsangi' ? co.toLowerCase() : ''}';
+    if (_contacts.any((c) => '${'${c.body['name']}'.toLowerCase()}|${'${c.body['company'] ?? ''}'.toLowerCase()}' == key)) {
+      message = 'This name is already in the directory.';
+      notifyListeners();
+      return false;
+    }
+    final id = newUuid();
+    return _save('donor-contact', id, org, {'id': id, 'name': n, 'kind': kind, 'company': kind == 'satsangi' ? co : '', 'family': kind == 'satsangi' && family}, null);
+  }
+
   List<Rec> donorsOf(String meetingId) => byPlace(_donors.where((r) => r.body['meetingId'] == meetingId));
   /// Where the announcer has got to in the donor list (D41): one small record per meeting, or null when nobody is announcing.
   Rec? cursorOf(String meetingId) => _newest(_cursor, meetingId);
@@ -424,16 +440,17 @@ class Store extends ChangeNotifier {
       notifyListeners();
     }
     try {
-      final r = await Future.wait([api.list('sabha'), api.list('meeting'), api.list('program-item'), api.list('slide'), api.list('donor'), api.list('ticker'), api.list('cursor'), api.list('screen')]);
+      final r = await Future.wait([api.list('sabha'), api.list('meeting'), api.list('program-item'), api.list('slide'), api.list('donor'), _contactsRead(), api.list('ticker'), api.list('cursor'), api.list('screen')]);
       final oldMeetings = meetings, oldItems = _items, oldSlides = _slides, oldDonors = _donors;
       sabhas = r[0];
       meetings = [...r[1]]..sort((a, b) => '${b.body['date']}'.compareTo('${a.body['date']}'));
       _items = r[2];
       _slides = r[3];
       _donors = r[4];
-      _ticker = r[5];
-      _cursor = r[6];
-      _screen = r[7];
+      _contacts = r[5];
+      _ticker = r[6];
+      _cursor = r[7];
+      _screen = r[8];
       if (_primed) {
         _diff('meeting', oldMeetings, meetings, oldMeetings);
         _diff('program-item', oldItems, _items, oldMeetings);
@@ -454,9 +471,21 @@ class Store extends ChangeNotifier {
     }
   }
 
-  List<Rec> _listFor(String kind) => kind == 'program-item' ? _items : (kind == 'slide' ? _slides : (kind == 'ticker' ? _ticker : (kind == 'cursor' ? _cursor : (kind == 'screen' ? _screen : _donors))));
+  /// The directory is extra: a server that does not know it yet leaves the phone working as before.
+  Future<List<Rec>> _contactsRead() async {
+    try {
+      return await api.list('donor-contact');
+    } on ApiError catch (e) {
+      if (e.status == 401) rethrow;
+      return _contacts;
+    }
+  }
+
+  List<Rec> _listFor(String kind) => kind == 'donor-contact' ? _contacts : kind == 'program-item' ? _items : (kind == 'slide' ? _slides : (kind == 'ticker' ? _ticker : (kind == 'cursor' ? _cursor : (kind == 'screen' ? _screen : _donors))));
   void _setList(String kind, List<Rec> l) {
-    if (kind == 'program-item') {
+    if (kind == 'donor-contact') {
+      _contacts = l;
+    } else if (kind == 'program-item') {
       _items = l;
     } else if (kind == 'slide') {
       _slides = l;

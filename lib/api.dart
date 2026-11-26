@@ -12,7 +12,7 @@ class ApiError implements Exception {
   String toString() => message;
 }
 
-const _kinds = {'sabha', 'meeting', 'program-item', 'slide', 'donor', 'ticker', 'cursor', 'screen'};
+const _kinds = {'sabha', 'meeting', 'program-item', 'slide', 'donor', 'donor-contact', 'ticker', 'cursor', 'screen'};
 final _uuid = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$');
 bool isUuid(String s) => _uuid.hasMatch(s);
 

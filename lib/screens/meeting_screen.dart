@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../store.dart';
 import '../slide_view.dart';
+import '../donor_name.dart';
 import 'slide_screens.dart';
 
 const mediums = ['Live', 'Video', 'PPT', 'Emcee', 'Other'];
@@ -195,16 +196,81 @@ class _Donors extends StatelessWidget {
   Future<void> _edit(BuildContext context, [dynamic rec]) {
     final name = TextEditingController(text: rec?.body['name'] ?? '');
     final occasion = TextEditingController(text: rec?.body['occasion'] ?? '');
+    final contacts = [for (final c in store.contacts) c.body];
+    Map? picked = rec == null ? null : contacts.where((c) => c['id'] == rec.body['contactId']).firstOrNull;
+    var family = rec?.body['family'] == true;
+    var style = rec?.body['style'] as String?;
+    var keep = false;
+    var kind = 'satsangi';
+    final company = TextEditingController();
+    // the text on the slide for what is typed now
+    String shown() {
+      final typed = name.text.trim();
+      if (picked != null) return donorText(picked!, family: family, style: style);
+      if (keep) return donorText({'name': typed, 'kind': kind, 'company': company.text}, family: family);
+      return family ? '$typed & Family' : typed;
+    }
+
     return _form(
       context,
       title: rec == null ? 'Add donor' : 'Change donor',
       fields: [
-        TextField(controller: name, decoration: const InputDecoration(labelText: 'Name')),
+        StatefulBuilder(builder: (c, set) {
+          final hits = picked == null && rec == null ? matchContacts(contacts, name.text) : const <Map>[];
+          final c0 = picked;
+          return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            TextField(controller: name, decoration: const InputDecoration(labelText: 'Name'), onChanged: (_) => set(() { if (picked != null) picked = null; })),
+            for (final h in hits)
+              ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                title: Text(donorText(h)),
+                subtitle: Text('${h['kind']}'),
+                onTap: () => set(() {
+                  picked = h;
+                  name.text = '${h['name']}';
+                  family = h['family'] == true;
+                  style = null;
+                  keep = false;
+                }),
+              ),
+            if (c0 != null) Padding(padding: const EdgeInsets.only(top: 4), child: Text('From the directory (${c0['kind']})', style: const TextStyle(fontSize: 12))),
+            if (c0 == null || c0['kind'] == 'satsangi')
+              CheckboxListTile(contentPadding: EdgeInsets.zero, dense: true, controlAffinity: ListTileControlAffinity.leading, title: const Text('& Family'), value: family, onChanged: (v) => set(() => family = v == true)),
+            if (c0 != null && c0['kind'] == 'satsangi' && '${c0['company'] ?? ''}'.isNotEmpty)
+              DropdownButtonFormField<String>(
+                value: style ?? 'name-company',
+                decoration: const InputDecoration(labelText: 'How the name shows'),
+                items: const [DropdownMenuItem(value: 'name-company', child: Text('Name (Company)')), DropdownMenuItem(value: 'name', child: Text('Name only')), DropdownMenuItem(value: 'company', child: Text('Company only'))],
+                onChanged: (v) => set(() => style = v),
+              ),
+            if (c0 == null && rec == null && name.text.trim().isNotEmpty && store.org.isNotEmpty) ...[
+              CheckboxListTile(contentPadding: EdgeInsets.zero, dense: true, controlAffinity: ListTileControlAffinity.leading, title: const Text('Save to the donor directory'), value: keep, onChanged: (v) => set(() => keep = v == true)),
+              if (keep)
+                Row(children: [
+                  DropdownButton<String>(value: kind, items: const [DropdownMenuItem(value: 'satsangi', child: Text('Satsangi')), DropdownMenuItem(value: 'company', child: Text('Company')), DropdownMenuItem(value: 'other', child: Text('Other'))], onChanged: (v) => set(() => kind = v ?? 'satsangi')),
+                  if (kind == 'satsangi') ...[const SizedBox(width: 12), Expanded(child: TextField(controller: company, onChanged: (_) => set(() {}), decoration: const InputDecoration(labelText: 'Company (optional)')))],
+                ]),
+            ],
+            if (name.text.trim().isNotEmpty) Padding(padding: const EdgeInsets.only(top: 8), child: Text('On the slide: ${shown()}', style: const TextStyle(fontWeight: FontWeight.w600))),
+          ]);
+        }),
         TextField(controller: occasion, decoration: const InputDecoration(labelText: 'Occasion')),
       ],
-      onSave: () {
-        final f = {'name': name.text.trim(), 'occasion': occasion.text.trim()};
-        if (f['name']!.isEmpty) return Future.value(false);
+      onSave: () async {
+        if (name.text.trim().isEmpty) return false;
+        if (picked == null && keep && rec == null) {
+          if (!await store.addContact(name.text, kind, company.text, family)) return false;
+          picked = store.contacts.where((c) => '${c.body['name']}' == name.text.replaceAll(RegExp(r'\s+'), ' ').trim() && '${c.body['kind']}' == kind).map((c) => c.body).firstOrNull;
+        }
+        final f = <String, dynamic>{'name': shown(), 'occasion': occasion.text.trim()};
+        if (picked != null) {
+          f['contactId'] = picked!['id'];
+          if (picked!['kind'] == 'satsangi') f['family'] = family;
+          if (style != null) f['style'] = style;
+        } else if (rec?.body['contactId'] != null) {
+          f['contactId'] = null;
+        }
         return rec == null ? store.add('donor', mid, f) : store.update(rec, f);
       },
       onDelete: rec == null ? null : () => store.delete(rec),
