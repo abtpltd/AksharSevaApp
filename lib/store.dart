@@ -481,9 +481,11 @@ class Store extends ChangeNotifier {
     }
   }
 
-  List<Rec> _listFor(String kind) => kind == 'donor-contact' ? _contacts : kind == 'program-item' ? _items : (kind == 'slide' ? _slides : (kind == 'ticker' ? _ticker : (kind == 'cursor' ? _cursor : (kind == 'screen' ? _screen : _donors))));
+  List<Rec> _listFor(String kind) => kind == 'meeting' ? meetings : kind == 'donor-contact' ? _contacts : kind == 'program-item' ? _items : (kind == 'slide' ? _slides : (kind == 'ticker' ? _ticker : (kind == 'cursor' ? _cursor : (kind == 'screen' ? _screen : _donors))));
   void _setList(String kind, List<Rec> l) {
-    if (kind == 'donor-contact') {
+    if (kind == 'meeting') {
+      meetings = [...l]..sort((a, b) => '${b.body['date']}'.compareTo('${a.body['date']}'));
+    } else if (kind == 'donor-contact') {
       _contacts = l;
     } else if (kind == 'program-item') {
       _items = l;

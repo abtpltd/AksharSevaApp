@@ -25,7 +25,10 @@ class MeetingScreen extends StatelessWidget {
           child: Scaffold(
             appBar: AppBar(
               title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('${m.body['date']}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)), Text('${store.sabhaName(m)} · ${m.body['start'] ?? ''}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400, color: Color(0xFFE8C9A0)))]),
-              actions: [IconButton(tooltip: 'Read again', onPressed: store.refresh, icon: const Icon(Icons.refresh))],
+              actions: [
+                if (store.canWrite) IconButton(tooltip: 'Change date, time or venue', onPressed: () => _editMeeting(context, store, m), icon: const Icon(Icons.edit_calendar)),
+                IconButton(tooltip: 'Read again', onPressed: store.refresh, icon: const Icon(Icons.refresh)),
+              ],
               bottom: const TabBar(tabs: [Tab(text: 'Program'), Tab(text: 'Slides'), Tab(text: 'Donors'), Tab(text: 'Scroller')]),
             ),
             body: Column(children: [
@@ -84,6 +87,42 @@ Future<void> _form(BuildContext context, {required String title, required List<W
         ]),
       ),
     ),
+  );
+}
+
+/// Changes when and where a meeting is held. The sabha's usual time stays as it is: only this meeting moves.
+Future<void> _editMeeting(BuildContext context, Store store, dynamic m) {
+  var date = DateTime.tryParse('${m.body['date']}') ?? DateTime.now();
+  final parts = '${m.body['start'] ?? '00:00'}'.split(':');
+  var time = TimeOfDay(hour: int.tryParse(parts[0]) ?? 0, minute: int.tryParse(parts.length > 1 ? parts[1] : '0') ?? 0);
+  final venue = TextEditingController(text: '${m.body['venue'] ?? ''}');
+  String two(int n) => n.toString().padLeft(2, '0');
+  return _form(
+    context,
+    title: 'Date, time and venue',
+    fields: [
+      StatefulBuilder(builder: (c, set) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            OutlinedButton.icon(
+              icon: const Icon(Icons.event),
+              label: Text('${date.year}-${two(date.month)}-${two(date.day)}'),
+              onPressed: () async {
+                final d = await showDatePicker(context: c, initialDate: date, firstDate: DateTime(2020), lastDate: DateTime(2100));
+                if (d != null) set(() => date = d);
+              },
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.schedule),
+              label: Text('${two(time.hour)}:${two(time.minute)}'),
+              onPressed: () async {
+                final t = await showTimePicker(context: c, initialTime: time);
+                if (t != null) set(() => time = t);
+              },
+            ),
+          ])),
+      TextField(controller: venue, decoration: const InputDecoration(labelText: 'Venue')),
+    ],
+    onSave: () => store.update(m, {'date': '${date.year}-${two(date.month)}-${two(date.day)}', 'start': '${two(time.hour)}:${two(time.minute)}', 'venue': venue.text.trim()}),
   );
 }
 
